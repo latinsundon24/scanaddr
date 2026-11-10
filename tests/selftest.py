@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -63,6 +64,53 @@ def fixture_checks():
             check(case["name"], "EXCEPTION: %s" % exc, case["expect"])
         else:
             check(case["name"], got, case["expect"])
+
+
+def number_checks():
+    """通用「编号区段」能力：按填写的数值原样逐 +1 展开，位数不限；可与 IP/端口变量共存。"""
+    print("\n[2b] 编号区段（按填写数值原样展开，位数不限）")
+    widths = [
+        ("01-03", ["01", "02", "03"]),
+        ("001-003", ["001", "002", "003"]),
+        ("0001-0003", ["0001", "0002", "0003"]),
+        ("00001-00003", ["00001", "00002", "00003"]),
+        ("00000001-00000003", ["00000001", "00000002", "00000003"]),
+        ("0000000001-0000000003", ["0000000001", "0000000002", "0000000003"]),
+        ("1-3", ["1", "2", "3"]),
+        ("000001+3", ["000001", "000002", "000003"]),
+        ("099-101", ["099", "100", "101"]),
+        ("001-0003", ["001", "002", "003"]),
+        ("1-0003", ["1", "2", "3"]),
+        ("007", ["007"]),
+        ("12345", ["12345"]),
+    ]
+    for expr, expect in widths:
+        check("编号宽度 %s" % expr, ref.expand("number", expr), expect)
+    vals = ref.expand("number", "0001-9999")
+    check("0001-9999 展开 9999 个", len(vals), 9999)
+    check("首值为 0001", vals[0], "0001")
+    check("末值为 9999", vals[-1], "9999")
+    check("中间值按起始位数输出", vals[998], "0999")
+    urls, skipped = ref.build_urls(
+        "http://example.com/live/{N}_1.m3u8",
+        [{"name": "N", "kind": "number", "expression": "0001-9999"}],
+    )
+    check("候选 URL 全部生成", len(urls), 9999)
+    check("非法 URL 为 0", skipped, 0)
+    check("首个 URL", urls[0], "http://example.com/live/0001_1.m3u8")
+    check("末个 URL", urls[-1], "http://example.com/live/9999_1.m3u8")
+    check_true("该用例(0001-9999)所有 URL 编号均为 4 位",
+               all(re.search(r"/live/[0-9]{4}_1\.m3u8$", u) for u in urls), str(urls[:2]))
+    both, _ = ref.build_urls(
+        "http://{A}:{P}/live/{N}_1.m3u8",
+        [
+            {"name": "A", "kind": "mixed", "expression": "127.0.0.1,::1"},
+            {"name": "P", "kind": "port", "expression": "8080"},
+            {"name": "N", "kind": "number", "expression": "0001-0003"},
+        ],
+    )
+    check("IP + 端口 + 编号组合 = 6 个 URL", len(both), 6)
+    check_true("IPv6 主机位仍自动加方括号", "http://[::1]:8080/live/0002_1.m3u8" in both, str(both))
 
 
 def plan_checks(port):
@@ -180,6 +228,7 @@ def network_checks(port, log_file):
 def main():
     print("scanaddr 本地自检 (Python 参考实现)")
     fixture_checks()
+    number_checks()
     proc = None
     try:
         proc, port, log_file, _ = start_server()

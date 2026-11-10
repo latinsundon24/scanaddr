@@ -18,6 +18,23 @@
     {"name": "mixed_v4_v6", "kind": "mixed", "expression": "127.0.0.1,::1", "expect": ["127.0.0.1", "::1"]},
     {"name": "port_range", "kind": "port", "expression": "8080-8082", "expect": ["8080", "8081", "8082"]},
     {"name": "port_list", "kind": "port", "expression": "80,443, 8080", "expect": ["80", "443", "8080"]},
+    {"name": "number_padded_range", "kind": "number", "expression": "0000-0003", "expect": ["0000", "0001", "0002", "0003"]},
+    {"name": "number_padded_cross_width", "kind": "number", "expression": "0998-1001", "expect": ["0998", "0999", "1000", "1001"]},
+    {"name": "number_plain_range", "kind": "number", "expression": "1-3", "expect": ["1", "2", "3"]},
+    {"name": "number_padded_plus", "kind": "number", "expression": "0008+3", "expect": ["0008", "0009", "0010"]},
+    {"name": "number_mixed_list", "kind": "number", "expression": "0001,0003-0004,9", "expect": ["0001", "0003", "0004", "9"]},
+    {"name": "number_single_padded", "kind": "number", "expression": "0042", "expect": ["0042"]},
+    {"name": "number_width_2", "kind": "number", "expression": "08-11", "expect": ["08", "09", "10", "11"]},
+    {"name": "number_width_3", "kind": "number", "expression": "001-003", "expect": ["001", "002", "003"]},
+    {"name": "number_width_5", "kind": "number", "expression": "00001-00003", "expect": ["00001", "00002", "00003"]},
+    {"name": "number_width_10", "kind": "number", "expression": "0000000001-0000000003", "expect": ["0000000001", "0000000002", "0000000003"]},
+    {"name": "number_width_no_pad", "kind": "number", "expression": "8-11", "expect": ["8", "9", "10", "11"]},
+    {"name": "number_plus_width_6", "kind": "number", "expression": "000001+3", "expect": ["000001", "000002", "000003"]},
+    {"name": "number_width_8_list", "kind": "number", "expression": "00000001,00000003", "expect": ["00000001", "00000003"]},
+    {"name": "number_start_decides_width", "kind": "number", "expression": "001-0003", "expect": ["001", "002", "003"]},
+    {"name": "number_plain_start_no_padding", "kind": "number", "expression": "1-0003", "expect": ["1", "2", "3"]},
+    {"name": "number_single_007", "kind": "number", "expression": "007", "expect": ["007"]},
+    {"name": "number_single_plain_large", "kind": "number", "expression": "12345", "expect": ["12345"]},
     {"name": "text_list", "kind": "text", "expression": "a,b", "expect": ["a", "b"]}
   ],
   "render": [
@@ -29,6 +46,7 @@
     {"name": "v6_in_path", "template": "http://example.com/ip/{A}/check", "values": {"A": ["2001:db8::5"]}, "expect": ["http://example.com/ip/2001:db8::5/check"]},
     {"name": "bracketed_value_in_query", "template": "http://127.0.0.1/which?addr={A}", "values": {"A": ["[::1]"]}, "expect": ["http://127.0.0.1/which?addr=::1"]},
     {"name": "no_scheme", "template": "{A}:8080/which", "values": {"A": ["::1"]}, "expect": ["[::1]:8080/which"]},
+    {"name": "padded_number_in_path", "template": "http://example.com/live/{N}_1.m3u8", "values": {"N": ["0001", "0099", "9999"]}, "expect": ["http://example.com/live/0001_1.m3u8", "http://example.com/live/0099_1.m3u8", "http://example.com/live/9999_1.m3u8"]},
     {"name": "multi_variable_cartesian", "template": "http://{A}:{P}/which?peer={B}", "values": {"A": ["127.0.0.1", "::1"], "P": ["8000"], "B": ["x", "y"]}, "expect": ["http://127.0.0.1:8000/which?peer=x", "http://127.0.0.1:8000/which?peer=y", "http://[::1]:8000/which?peer=x", "http://[::1]:8000/which?peer=y"]}
   ]
 }

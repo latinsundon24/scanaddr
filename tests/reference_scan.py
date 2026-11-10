@@ -137,6 +137,39 @@ def _expand_port(token: str, max_count: int):
     return [str(num(token))]
 
 
+def _expand_number(token: str, max_count: int):
+    """编号变量：输出形态完全由起始数字的字面决定，与 Swift IPSpec.expandNumber 一致。"""
+    def num(s):
+        if not s.isascii() or not s.isdigit():
+            raise ValueError("bad number: %s" % token)
+        return int(s)
+
+    def width(s):
+        return len(s) if len(s) > 1 and s.startswith("0") else 0
+
+    def fmt(v, w):
+        return str(v).zfill(w) if w else str(v)
+
+    if max_count <= 0:
+        raise ValueError("too many numbers: %s" % token)
+    if "-" in token:
+        a_text, b_text = token.split("-", 1)
+        a, b = num(a_text), num(b_text)
+        if b < a or b - a + 1 > max_count:
+            raise ValueError("bad number range: %s" % token)
+        # 只看起始字面：结束边界仅表示数值大小，不改写输出形态。
+        w = width(a_text)
+        return [fmt(v, w) for v in range(a, b + 1)]
+    if "+" in token:
+        a_text, n_text = token.split("+", 1)
+        a, n = num(a_text), num(n_text)
+        if n <= 0 or n > max_count:
+            raise ValueError("bad number plus: %s" % token)
+        w = width(a_text)
+        return [fmt(a + i, w) for i in range(n)]
+    return [fmt(num(token), width(token))]
+
+
 def expand(kind: str, expression: str, max_count: int = 65536):
     parts = tokens(expression)
     if not parts:
@@ -147,6 +180,8 @@ def expand(kind: str, expression: str, max_count: int = 65536):
             chunk = [part]
         elif kind == "port":
             chunk = _expand_port(part, max_count - len(out))
+        elif kind == "number":
+            chunk = _expand_number(part, max_count - len(out))
         elif kind == "mixed":
             chunk = _expand_ip(part, max_count - len(out))
         else:

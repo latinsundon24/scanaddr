@@ -28,7 +28,7 @@ struct ContentView: View {
                         .disableAutocorrection(true)
                         .textInputAutocapitalization(.never)
                         .onChange(of: vm.template) { _ in vm.syncVariables() }
-                    Text("用 {名称} 标记 IP 位置，可出现在主机、路径、参数的任意位置，也可出现多次（同名变量同值）。主机位的 IPv6 会自动补 [ ]；{名称:raw} 强制使用裸地址。")
+                    Text("用 {名称} 标记要替换的位置，可出现在主机、路径、文件名、参数的任意位置，也可出现多次（同名变量同值）。把 URL 里要扫的编号换成 {N} 即可。主机位的 IPv6 会自动补 [ ]；{名称:raw} 强制使用裸地址。")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     HStack {
@@ -174,6 +174,8 @@ struct ContentView: View {
             return "IPv4/IPv6 均可：1.2.3.4、1.2.3.4/24、1.2.3.4-1.2.3.10、1.2.3.4+20；::1/128、2001:db8::1-2001:db8::ff。逗号/换行分隔多段。"
         case .port:
             return "80,443,8080 / 8000-8100 / 8080+10"
+        case .number:
+            return "编号区段：直接填起止数值，按你写的数字原样逐个展开，位数不限、不改写数值。0001-9999 / 01-99 / 000001-999999 / 0001+50 / 0001,0003-0005；单变量上限 65536 个。"
         case .text:
             return "逗号或换行分隔的任意字符串"
         }

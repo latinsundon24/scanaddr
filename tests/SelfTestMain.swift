@@ -147,6 +147,71 @@ private final class Runner: @unchecked Sendable {
         }
     }
 
+    /// 通用「编号区段」能力：按填写的数值原样逐 +1 展开，位数不限；可与 IP/端口变量共存。
+    func numberChecks() {
+        print("\n[2b] 编号区段（按填写数值原样展开，位数不限）")
+        let widths: [(String, [String])] = [
+            ("01-03", ["01", "02", "03"]),
+            ("001-003", ["001", "002", "003"]),
+            ("0001-0003", ["0001", "0002", "0003"]),
+            ("00001-00003", ["00001", "00002", "00003"]),
+            ("00000001-00000003", ["00000001", "00000002", "00000003"]),
+            ("0000000001-0000000003", ["0000000001", "0000000002", "0000000003"]),
+            ("1-3", ["1", "2", "3"]),
+            ("000001+3", ["000001", "000002", "000003"]),
+            ("099-101", ["099", "100", "101"]),
+            ("001-0003", ["001", "002", "003"]),
+            ("1-0003", ["1", "2", "3"]),
+            ("007", ["007"]),
+            ("12345", ["12345"])
+        ]
+        for (expr, expect) in widths {
+            do {
+                let got = try IPSpec.expand(VariableDef(name: "N", kind: .number,
+                                                        expression: expr)).map(\.text)
+                check("编号宽度 \(expr)", got, expect)
+            } catch {
+                fail("编号宽度 \(expr) 异常: \(error)")
+            }
+        }
+        do {
+            let def = VariableDef(name: "N", kind: .number, expression: "0001-9999")
+            let values = try IPSpec.expand(def).map(\.text)
+            check("0001-9999 展开 9999 个", values.count, 9999)
+            check("首值为 0001", values.first, "0001")
+            check("末值为 9999", values.last, "9999")
+            check("中间值按起始位数输出", values[998], "0999")
+            let plan = ScanPlan(template: "http://example.com/live/{N}_1.m3u8",
+                                variables: [def])
+            let built = try plan.buildURLs()
+            check("候选 URL 全部生成", built.urls.count, 9999)
+            check("非法 URL 为 0", built.skipped, 0)
+            check("首个 URL", built.urls.first,
+                  "http://example.com/live/0001_1.m3u8")
+            check("末个 URL", built.urls.last,
+                  "http://example.com/live/9999_1.m3u8")
+            checkTrue("该用例(0001-9999)所有 URL 编号均为 4 位",
+                      built.urls.allSatisfy {
+                          $0.range(of: #"/live/[0-9]{4}_1\.m3u8$"#,
+                                   options: .regularExpression) != nil
+                      },
+                      "\(built.urls.prefix(2))")
+
+            let combined = ScanPlan(template: "http://{A}:{P}/live/{N}_1.m3u8",
+                                    variables: [
+                                        VariableDef(name: "A", kind: .mixed, expression: "127.0.0.1,::1"),
+                                        VariableDef(name: "P", kind: .port, expression: "8080"),
+                                        VariableDef(name: "N", kind: .number, expression: "0001-0003")
+                                    ])
+            let both = try combined.buildURLs()
+            check("IP + 端口 + 编号组合 = 6 个 URL", both.urls.count, 6)
+            checkTrue("IPv6 主机位仍自动加方括号",
+                      both.urls.contains("http://[::1]:8080/live/0002_1.m3u8"), "\(both.urls)")
+        } catch {
+            fail("编号区段检查异常: \(error)")
+        }
+    }
+
     func planChecks(port: Int) {
         print("\n[3] 候选 URL 生成")
         do {
@@ -324,6 +389,7 @@ struct SelfTestMain {
         let runner = Runner()
         print("scanaddr Swift 自检 (ScanCore)")
         runner.fixtureChecks()
+        runner.numberChecks()
 
         var server: MockServer?
         do {

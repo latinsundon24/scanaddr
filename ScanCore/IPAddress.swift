@@ -143,14 +143,16 @@ private func prefixMask(_ prefix: Int, bits: Int) -> (UInt64, UInt64) {
 public enum VariableKind: String, Codable, CaseIterable, Identifiable {
     case mixed   // IPv4 / IPv6 混合，支持 CIDR、范围、+N
     case port    // 端口数字
+    case number  // 编号数字，支持前导零补位（0000-2000）
     case text    // 任意字符串
 
     public var id: String { rawValue }
     public var label: String {
         switch self {
-        case .mixed: return "IP (v4/v6)"
-        case .port:  return "端口"
-        case .text:  return "文本"
+        case .mixed:  return "IP (v4/v6)"
+        case .port:   return "端口"
+        case .number: return "编号"
+        case .text:   return "文本"
         }
     }
 }
@@ -204,6 +206,8 @@ public enum IPSpec {
                 chunk = [part]
             case .port:
                 chunk = try expandPort(part, maxCount: maxCount - out.count, label: part)
+            case .number:
+                chunk = try expandNumber(part, maxCount: maxCount - out.count, label: part)
             case .mixed:
                 chunk = try expandIP(part, maxCount: maxCount - out.count)
             }
@@ -336,5 +340,54 @@ public enum IPSpec {
         }
         let single = try intOrThrow(token)
         return [String(single)]
+    }
+
+    /// 编号变量：`0001-9999`、`0001+50`、`0001,0003-0005`、`42`。
+    /// 输出形态完全由「起始数字怎么写」决定，不改写用户填写的数值：
+    /// 起始带前导零（0001）就按该位数逐 +1 输出 0001…9999；
+    /// 起始不带前导零（1）就输出普通十进制 1…9999；位数不限，超宽不截断。
+    /// 结束边界只表示数值大小，不改变输出形态。
+    private static func expandNumber(_ token: String, maxCount: Int, label: String) throws -> [String] {
+        func isDigits(_ s: String) -> Bool {
+            !s.isEmpty && s.utf8.allSatisfy { $0 >= 48 && $0 <= 57 }
+        }
+        func intOrThrow(_ s: String) throws -> Int {
+            guard isDigits(s), let v = Int(s) else { throw ScanCoreError.invalidExpression(label) }
+            return v
+        }
+        func width(_ s: String) -> Int {
+            s.count > 1 && s.hasPrefix("0") ? s.count : 0
+        }
+        func padded(_ v: Int, width w: Int) -> String {
+            let s = String(v)
+            return w > s.count ? String(repeating: "0", count: w - s.count) + s : s
+        }
+        guard maxCount > 0 else { throw ScanCoreError.tooManyAddresses(label) }
+
+        if let dash = token.firstIndex(of: "-") {
+            let aText = String(token[..<dash])
+            let bText = String(token[token.index(after: dash)...])
+            let a = try intOrThrow(aText)
+            let b = try intOrThrow(bText)
+            guard b >= a, b - a < maxCount else {
+                throw ScanCoreError.tooManyAddresses(label)
+            }
+            // 只看起始字面：不因结束边界的位数不同而改写输出形态。
+            let w = width(aText)
+            return (a...b).map { padded($0, width: w) }
+        }
+        if let plus = token.firstIndex(of: "+") {
+            let aText = String(token[..<plus])
+            let nText = String(token[token.index(after: plus)...])
+            let a = try intOrThrow(aText)
+            let n = try intOrThrow(nText)
+            guard n > 0, n <= maxCount, a <= Int.max - (n - 1) else {
+                throw ScanCoreError.tooManyAddresses(label)
+            }
+            let w = width(aText)
+            return (0..<n).map { padded(a + $0, width: w) }
+        }
+        let v = try intOrThrow(token)
+        return [padded(v, width: width(token))]
     }
 }
