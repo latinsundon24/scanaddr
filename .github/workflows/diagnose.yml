@@ -1,0 +1,15 @@
+name: diagnose
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ubuntu-probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "ubuntu runner ok"
+
+  macos-probe:
+    runs-on: macos-14
+    steps:
+      - run: echo "macos runner ok"
