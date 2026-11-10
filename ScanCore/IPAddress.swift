@@ -120,11 +120,19 @@ public struct IPNumber: Equatable, Comparable, Hashable {
 private func prefixMask(_ prefix: Int, bits: Int) -> (UInt64, UInt64) {
     var h: UInt64 = 0
     var l: UInt64 = 0
-    for i in 0..<min(max(prefix, 0), bits) {
-        if i < 64 {
-            h |= (UInt64(1) << UInt64(63 - i))
-        } else {
-            l |= (UInt64(1) << UInt64(63 - (i - 64)))
+    let p = min(max(prefix, 0), bits)
+    if bits == 32 {
+        // IPv4 数值存放在 lo 的低 32 位，掩码必须落在 lo 的 bit31..(32-p)，
+        // 不能按 128 位布局写到 hi 上，否则整个网络地址会被清零。
+        for i in 0..<p { l |= (UInt64(1) << UInt64(31 - i)) }
+    } else {
+        // IPv6：hi 承载前 64 位，lo 承载后 64 位。
+        for i in 0..<p {
+            if i < 64 {
+                h |= (UInt64(1) << UInt64(63 - i))
+            } else {
+                l |= (UInt64(1) << UInt64(63 - (i - 64)))
+            }
         }
     }
     return (h, l)
