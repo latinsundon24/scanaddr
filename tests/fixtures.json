@@ -1,0 +1,34 @@
+{
+  "note": "Swift 自检与 Python 参考实现共用的用例集合，任何一侧不一致都不允许编译 IPA。",
+  "expand": [
+    {"name": "ipv4_single", "kind": "mixed", "expression": "192.168.1.1", "expect": ["192.168.1.1"]},
+    {"name": "ipv4_list", "kind": "mixed", "expression": "10.0.0.1, 10.0.0.2\n10.0.0.3", "expect": ["10.0.0.1", "10.0.0.2", "10.0.0.3"]},
+    {"name": "ipv4_range_short", "kind": "mixed", "expression": "192.168.1.8-10", "expect": ["192.168.1.8", "192.168.1.9", "192.168.1.10"]},
+    {"name": "ipv4_range_carry", "kind": "mixed", "expression": "10.0.0.254-10.0.1.1", "expect": ["10.0.0.254", "10.0.0.255", "10.0.1.0", "10.0.1.1"]},
+    {"name": "ipv4_plus", "kind": "mixed", "expression": "172.16.0.1+3", "expect": ["172.16.0.1", "172.16.0.2", "172.16.0.3"]},
+    {"name": "ipv4_cidr_30", "kind": "mixed", "expression": "192.168.5.2/30", "expect": ["192.168.5.0", "192.168.5.1", "192.168.5.2", "192.168.5.3"]},
+    {"name": "ipv4_cidr_31", "kind": "mixed", "expression": "192.168.9.1/31", "expect": ["192.168.9.0", "192.168.9.1"]},
+    {"name": "ipv4_cidr_32", "kind": "mixed", "expression": "8.8.8.8/32", "expect": ["8.8.8.8"]},
+    {"name": "ipv6_single_norm", "kind": "mixed", "expression": "2001:0DB8:0000:0000:0000:0000:0000:0001", "expect": ["2001:db8::1"]},
+    {"name": "ipv6_plus", "kind": "mixed", "expression": "::1+3", "expect": ["::1", "::2", "::3"]},
+    {"name": "ipv6_range_carry", "kind": "mixed", "expression": "2001:db8::ff-2001:db8::101", "expect": ["2001:db8::ff", "2001:db8::100", "2001:db8::101"]},
+    {"name": "ipv6_range_short", "kind": "mixed", "expression": "2001:db8::1-3", "expect": ["2001:db8::1", "2001:db8::2", "2001:db8::3"]},
+    {"name": "ipv6_cidr_126", "kind": "mixed", "expression": "2001:db8::4/126", "expect": ["2001:db8::4", "2001:db8::5", "2001:db8::6", "2001:db8::7"]},
+    {"name": "ipv6_bracket_input", "kind": "mixed", "expression": "[::1]", "expect": ["::1"]},
+    {"name": "mixed_v4_v6", "kind": "mixed", "expression": "127.0.0.1,::1", "expect": ["127.0.0.1", "::1"]},
+    {"name": "port_range", "kind": "port", "expression": "8080-8082", "expect": ["8080", "8081", "8082"]},
+    {"name": "port_list", "kind": "port", "expression": "80,443, 8080", "expect": ["80", "443", "8080"]},
+    {"name": "text_list", "kind": "text", "expression": "a,b", "expect": ["a", "b"]}
+  ],
+  "render": [
+    {"name": "v6_host_auto_bracket", "template": "http://{A}:8080/which", "values": {"A": ["::1"]}, "expect": ["http://[::1]:8080/which"]},
+    {"name": "v4_host_with_template_brackets", "template": "http://[{A}]:8080/which", "values": {"A": ["127.0.0.1"]}, "expect": ["http://127.0.0.1:8080/which"]},
+    {"name": "v6_host_with_template_brackets", "template": "http://[{A}]:8080/which", "values": {"A": ["::1"]}, "expect": ["http://[::1]:8080/which"]},
+    {"name": "v6_query_raw", "template": "http://{A}:8080/which?peer={A:raw}", "values": {"A": ["::1"]}, "expect": ["http://[::1]:8080/which?peer=::1"]},
+    {"name": "multi_position_same_var", "template": "http://{A}/x/{A:raw}", "values": {"A": ["2001:db8::1"]}, "expect": ["http://[2001:db8::1]/x/2001:db8::1"]},
+    {"name": "v6_in_path", "template": "http://example.com/ip/{A}/check", "values": {"A": ["2001:db8::5"]}, "expect": ["http://example.com/ip/2001:db8::5/check"]},
+    {"name": "bracketed_value_in_query", "template": "http://127.0.0.1/which?addr={A}", "values": {"A": ["[::1]"]}, "expect": ["http://127.0.0.1/which?addr=::1"]},
+    {"name": "no_scheme", "template": "{A}:8080/which", "values": {"A": ["::1"]}, "expect": ["[::1]:8080/which"]},
+    {"name": "multi_variable_cartesian", "template": "http://{A}:{P}/which?peer={B}", "values": {"A": ["127.0.0.1", "::1"], "P": ["8000"], "B": ["x", "y"]}, "expect": ["http://127.0.0.1:8000/which?peer=x", "http://127.0.0.1:8000/which?peer=y", "http://[::1]:8000/which?peer=x", "http://[::1]:8000/which?peer=y"]}
+  ]
+}

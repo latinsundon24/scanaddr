@@ -1,0 +1,147 @@
+name: build-ipa
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # 编译门禁：自检不通过，build job 永远不会启动。
+  selftest:
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain info
+        run: |
+          xcodebuild -version
+          swift --version
+          python3 --version
+
+      - name: Python reference selftest (cross-check)
+        run: python3 tests/selftest.py
+
+      - name: Compile Swift selftest from ScanCore sources
+        run: |
+          set -euo pipefail
+          swiftc -O -parse-as-library -o scanaddr-selftest \
+            ScanCore/*.swift tests/SelfTestMain.swift
+
+      - name: Swift selftest - real IPv4 / IPv6 HTTP scan
+        env:
+          SCANADDR_ROOT: ${{ github.workspace }}
+        run: |
+          set -o pipefail
+          ./scanaddr-selftest 2>&1 | tee scanaddr-selftest.log
+          test ${PIPESTATUS[0]} -eq 0
+
+      - name: Upload selftest log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scanaddr-selftest-log
+          path: |
+            scanaddr-selftest.log
+            xcodebuild-tests.log
+          if-no-files-found: ignore
+
+  build:
+    needs: selftest
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Compute version (base + run number)
+        id: ver
+        run: |
+          BASE=$(grep -m1 'MARKETING_VERSION:' project.yml | sed -E 's/.*"([^"]+)".*/\1/')
+          PATCH="${{ github.run_number }}"
+          echo "PATCH=$PATCH" >> "$GITHUB_OUTPUT"
+          echo "FULL=${BASE}.${PATCH}" >> "$GITHUB_OUTPUT"
+          echo "App version this build: ${BASE}.${PATCH} (build $PATCH)"
+
+      - name: Build unsigned app (iOS device, Release)
+        env:
+          FULL: ${{ steps.ver.outputs.FULL }}
+          PATCH: ${{ steps.ver.outputs.PATCH }}
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project ScanAddr.xcodeproj \
+            -scheme ScanAddr \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            MARKETING_VERSION=$FULL \
+            CURRENT_PROJECT_VERSION=$PATCH \
+            build 2>&1 | tee xcodebuild.log
+          test ${PIPESTATUS[0]} -eq 0
+
+      - name: Verify scan core really compiled in
+        run: |
+          set -euo pipefail
+          APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' | head -1)
+          if [ -z "$APP" ]; then echo "app not found"; exit 1; fi
+          echo "APP=$APP"
+          du -sh "$APP"
+          strings "$APP/ScanAddr" > /tmp/scanaddr-strs.txt
+          if grep -q "scanaddr/1.0" /tmp/scanaddr-strs.txt; then
+            echo "ScanEngine: real HTTP probe path present (User-Agent marker found)"
+          else
+            echo "ScanEngine NOT compiled in: User-Agent marker missing"
+            exit 1
+          fi
+          if grep -q "2001:db8::1-2001:db8::20" /tmp/scanaddr-strs.txt; then
+            echo "ScanCore + UI presets: IPv6 scan preset present"
+          else
+            echo "ScanCore/UI presets NOT compiled in"
+            exit 1
+          fi
+
+      - name: Package unsigned IPA
+        env:
+          FULL: ${{ steps.ver.outputs.FULL }}
+        run: |
+          set -euo pipefail
+          APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' | head -1)
+          IPA="scanaddr-${FULL}-unsigned.ipa"
+          rm -rf Payload "$IPA"
+          mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qry "$IPA" Payload
+          shasum -a 256 "$IPA" | tee "${IPA}.sha256"
+          ls -lh "$IPA"
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scanaddr-build-log
+          path: xcodebuild.log
+          if-no-files-found: ignore
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: scanaddr-unsigned-ipa
+          path: |
+            scanaddr-*-unsigned.ipa
+            scanaddr-*-unsigned.ipa.sha256
+          if-no-files-found: error

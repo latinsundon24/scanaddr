@@ -1,0 +1,18 @@
+# XcodeGen / xcodebuild 产物
+ScanAddr.xcodeproj/
+build/
+build-tests/
+DerivedData/
+*.xcworkspace
+xcuserdata/
+*.ipa
+*.app
+*.dSYM.zip
+Payload/
+
+# 自检临时文件
+scanaddr-selftest
+*.log
+tests/__pycache__/
+__pycache__/
+.DS_Store
